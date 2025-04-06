@@ -87,15 +87,18 @@ router.post('/signin', function (req, res) {
     })
 });
 
-router.route('/movies')
+router.route('/movies/:movieID')
   .get(authJwtController.isAuthenticated, async (req, res) => {
     try {
-      // Check if the query parameter 'reviews' is set to 'true'
+      const movieId = req.params.movieID;
       const includeReviews = req.query.reviews === 'true';
 
       if (includeReviews) {
-        // Perform aggregation to join movies with their reviews using $lookup
+        // Perform aggregation to join movie with reviews using $lookup
         const moviesWithReviews = await Movie.aggregate([
+          {
+            $match: { _id: mongoose.Types.ObjectId(movieId) } // Match the movie by movieId
+          },
           {
             $lookup: {
               from: "reviews", // name of the foreign collection (reviews collection)
@@ -103,20 +106,71 @@ router.route('/movies')
               foreignField: "movieId", // field in the Review collection
               as: "reviews" // name of the new field where reviews will be added
             }
+          },
+          {
+            $addFields: {
+              averageRating: { $avg: "$reviews.rating" } // Add average rating for the movie
+            }
+          },
+          {
+            $sort: {
+              averageRating: -1, // Sort by averageRating in descending order
+              title: 1 // If the rating is the same, sort alphabetically by title
+            }
           }
         ]);
 
+        if (!moviesWithReviews.length) {
+          return res.status(404).json({ message: "Movie not found" });
+        }
+
         res.status(200).json({ success: true, movies: moviesWithReviews });
       } else {
-        // If reviews are not requested, simply retrieve movies
-        const movies = await Movie.find();
-        res.status(200).json({ success: true, movies });
+        // If reviews are not requested, just retrieve the movie
+        const movie = await Movie.findById(movieId);
+
+        if (!movie) {
+          return res.status(404).json({ message: "Movie not found" });
+        }
+
+        res.status(200).json({ success: true, movie });
       }
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Error retrieving movie", error: error.message });
+    }
+});
+
+router.route('/movies')
+  .get(authJwtController.isAuthenticated, async (req, res) => {
+    try {
+      // Aggregation to get all movies with reviews and average rating
+      const moviesWithReviews = await Movie.aggregate([
+        {
+          $lookup: {
+            from: "reviews", // name of the foreign collection (reviews collection)
+            localField: "_id", // field in the Movie collection
+            foreignField: "movieId", // field in the Review collection
+            as: "reviews" // name of the new field where reviews will be added
+          }
+        },
+        {
+          $addFields: {
+            averageRating: { $avg: "$reviews.rating" } // Add average rating for the movie
+          }
+        },
+        {
+          $sort: {
+            averageRating: -1, // Sort by averageRating in descending order
+            title: 1 // If the rating is the same, sort alphabetically by title
+          }
+        }
+      ]);
+
+      res.status(200).json({ success: true, movies: moviesWithReviews });
     } catch (error) {
       res.status(500).json({ success: false, message: "Error retrieving movies", error: error.message });
     }
 });
-
 
 router.route('/review')
   .get(authJwtController.isAuthenticated, async (req, res) => {
