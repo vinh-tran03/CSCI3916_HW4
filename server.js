@@ -87,6 +87,84 @@ router.post('/signin', function (req, res) {
     })
 });
 
+router.route('/movies')
+  .get(authJwtController.isAuthenticated, async (req, res) => {
+    try {
+      // Check if the query parameter 'reviews' is set to 'true'
+      const includeReviews = req.query.reviews === 'true';
+
+      if (includeReviews) {
+        // Perform aggregation to join movies with their reviews using $lookup
+        const moviesWithReviews = await Movie.aggregate([
+          {
+            $lookup: {
+              from: "reviews", // name of the foreign collection (reviews collection)
+              localField: "_id", // field in the Movie collection
+              foreignField: "movieId", // field in the Review collection
+              as: "reviews" // name of the new field where reviews will be added
+            }
+          }
+        ]);
+
+        res.status(200).json({ success: true, movies: moviesWithReviews });
+      } else {
+        // If reviews are not requested, simply retrieve movies
+        const movies = await Movie.find();
+        res.status(200).json({ success: true, movies });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Error retrieving movies", error: error.message });
+    }
+});
+
+
+router.route('/review')
+  .get(authJwtController.isAuthenticated, async (req, res) => {
+      try {
+          const reviews = await Review.find().populate('movieId');
+          res.status(200).json(reviews);
+      } catch (err) {
+          res.status(500).json({ message: err.message });
+      }
+  })
+
+  // POST a new review (requires JWT auth)
+  .post(authJwtController.isAuthenticated, async (req, res) => {
+      try {
+          const { movieId, username, review, rating } = req.body;
+
+          if (!movieId || !username || !review || rating === undefined) {
+              return res.status(400).json({ message: 'All fields are required' });
+          }
+
+          const newReview = new Review({
+              movieId,
+              username,
+              review,
+              rating
+          });
+
+          await newReview.save();
+          res.status(201).json({ message: 'Review created!' });
+      } catch (err) {
+          res.status(500).json({ message: err.message });
+      }
+});
+
+// Optional DELETE route
+router.route('/review/:id')
+  .delete(authJwtController.isAuthenticated, async (req, res) => {
+      try {
+          const deleted = await Review.findByIdAndDelete(req.params.id);
+          if (!deleted) {
+              return res.status(404).json({ message: 'Review not found' });
+          }
+          res.status(200).json({ message: 'Review deleted' });
+      } catch (err) {
+          res.status(500).json({ message: err.message });
+      }
+});
+
 app.use('/', router);
 app.listen(process.env.PORT || 8080);
 module.exports = app; // for testing only
