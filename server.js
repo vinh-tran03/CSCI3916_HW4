@@ -182,27 +182,40 @@ router.route('/review')
       }
   })
 
-  // POST a new review (requires JWT auth)
-  .post(authJwtController.isAuthenticated, async (req, res) => {
-      try {
-          const { movieId, username, review, rating } = req.body;
+// POST a new review (requires JWT auth)
+router.route('/review')
+.post(authJwtController.isAuthenticated, async (req, res) => {
+  try {
+    const { movieId, username, review, rating } = req.body;
 
-          if (!movieId || !username || !review || rating === undefined) {
-              return res.status(400).json({ message: 'All fields are required' });
-          }
+    // Check if all required fields are provided
+    if (!movieId || !username || !review || rating === undefined) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
 
-          const newReview = new Review({
-              movieId,
-              username,
-              review,
-              rating
-          });
+    // Check if the movie exists in the database
+    const movie = await Movie.findById(movieId);
+    if (!movie) {
+      return res.status(404).json({ message: 'Movie not found' });
+    }
 
-          await newReview.save();
-          res.status(201).json({ message: 'Review created!' });
-      } catch (err) {
-          res.status(500).json({ message: err.message });
-      }
+    // Create a new review since the movie exists
+    const newReview = new Review({
+      movieId,
+      username,
+      review,
+      rating
+    });
+
+    // Save the review to the database
+    await newReview.save();
+
+    // Send a success response
+    res.status(201).json({ message: 'Review created!' });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // Optional DELETE route
