@@ -3,7 +3,7 @@ CSC3916 HW4
 File: Server.js
 Description: Web API scaffolding for Movie API
  */
-
+const mongoose = require('mongoose');
 var express = require('express');
 var bodyParser = require('body-parser');
 var passport = require('passport');
